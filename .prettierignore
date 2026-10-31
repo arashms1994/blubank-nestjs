@@ -1,0 +1,11 @@
+node_modules
+.agents
+.next
+.turbo
+dist
+coverage
+pnpm-lock.yaml
+*.tsbuildinfo
+next-env.d.ts
+apps/*/src/assets
+apps/*/public

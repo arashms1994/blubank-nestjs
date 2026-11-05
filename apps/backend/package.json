@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest",
-    "test:e2e": "cross-env NODE_ENV=development jest --config ./test/jest-e2e.json",
+    "test:e2e": "cross-env NODE_ENV=development CORS_ORIGINS=https://allowed.example jest --config ./test/jest-e2e.json",
     "clean": "rimraf dist coverage node_modules/.tmp",
     "format": "prettier --write ."
   },

@@ -63,6 +63,31 @@ Each app includes an `.env.example` with its port. Next.js and Vite read app-loc
 
 From an app directory, the matching `dev`, `build`, `start`, `lint`, `typecheck`, `test`, and `clean` scripts can also be run with `pnpm --filter <app> <script>`.
 
+### Backend HTTP configuration
+
+The backend exposes probe health at `/health`; application routes use `/api/v1/`. Set `CORS_ORIGINS` to a comma-separated list of browser origins. It may be empty in development and must contain at least one origin in production. `TRUST_PROXY` defaults to `false`; enable it only when the backend is behind a trusted proxy. Fastify then derives `request.ip` from forwarded headers. `BODY_LIMIT_BYTES` defaults to `1048576` (1 MB) and can be lowered per environment; startup rejects values above the 1 MB maximum.
+
+For local development in PowerShell:
+
+```powershell
+$env:NODE_ENV = 'development'
+$env:HOST = '127.0.0.1'
+$env:PORT = '4000'
+$env:BODY_LIMIT_BYTES = '1048576'
+$env:CORS_ORIGINS = 'http://localhost:3000'
+$env:TRUST_PROXY = 'false'
+pnpm dev:backend
+```
+
+In another PowerShell window, check the probe and a versioned route:
+
+```powershell
+curl.exe --fail http://127.0.0.1:4000/health
+curl.exe -i http://127.0.0.1:4000/api/v1/unknown
+```
+
+The health request returns `{"status":"ok"}` and the unknown API route returns 404. Stop the server with `Ctrl+C`. For production, set `NODE_ENV=production` and provide at least one `CORS_ORIGINS` value, then run `pnpm --filter backend build` followed by `pnpm --filter backend start`.
+
 ## Add an app or package
 
 Create app directories under `apps/` or config/tooling packages under `packages/`; pnpm discovers both through `pnpm-workspace.yaml`. Give each workspace a unique package name. Add shared dependencies with `workspace:*`, and add a script with the same name to each app when you want Turborepo to orchestrate it. Add the task's cache inputs and outputs to `turbo.json` when it produces artifacts.

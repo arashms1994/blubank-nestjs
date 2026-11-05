@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => ({
     strictPort: true,
   },
   preview: {
-    port: Number(loadEnv(mode, process.cwd(), '').PORT ?? process.env.PORT ?? 5173),
+    port: Number(loadEnv(mode, process.cwd(), '').PORT ?? process.env.PORT ?? 4173),
     strictPort: true,
   },
 }));

@@ -11,13 +11,13 @@
     "dev": {
       "cache": false,
       "persistent": true,
-      "env": ["NEXT_PUBLIC_*", "VITE_*"]
+      "env": ["NEXT_PUBLIC_*", "VITE_*", "HOST"]
     },
     "start": {
       "dependsOn": ["build"],
       "cache": false,
       "persistent": true,
-      "env": ["PORT"]
+      "env": ["PORT", "HOST"]
     },
     "lint": {
       "dependsOn": ["^lint"],

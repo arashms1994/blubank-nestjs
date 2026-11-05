@@ -9,7 +9,7 @@ Only the project owner adds rules to this section. Don't invent new ones.
 ### Commits
 
 - **One prompt → one review → one commit.** Each prompt results in exactly one commit. Never split a prompt's work into several commits.
-- **Never commit without the owner's review.** Leave the changes uncommitted and stop. Commit only after the project owner has reviewed them and explicitly asked for the commit.
+- **The owner must personally review the changes before any commit.** Leave all changes uncommitted and stop until the project owner has reviewed them and explicitly asked for the commit.
 - Commit messages follow Conventional Commits (enforced by commitlint).
 - No `Co-Authored-By` trailer in commit messages.
 
@@ -30,7 +30,7 @@ Only the project owner adds rules to this section. Don't invent new ones.
 ### Definition of done
 
 - `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` pass with zero errors and zero warnings, and running `pnpm build` a second time reports `FULL TURBO`.
-- **Every task is built and run before it is reported as done.** Run `pnpm dev`, and `pnpm start` after `pnpm build`, and confirm that every app boots without errors and answers on its port: frontend on 3000, admin on 5173 (dev) and 4173 (start), and backend on 4000 (`GET /health`). Stop the processes afterwards. If any app fails to build or run, the task is not done.
+- **Every task must be built and run before it is reported as done.** Run `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build`; run `pnpm build` a second time to verify `FULL TURBO`. Run `pnpm dev` and, after building, `pnpm start`; confirm every app boots without errors and answers on its port: frontend on 3000, admin on 5173 (dev) and 4173 (start), and backend on 4000 (`GET /health`). Stop the processes afterwards. If any check fails or any app fails to build or run, report the failure and do not call the task done.
 
 ### Architecture decisions (ADR)
 

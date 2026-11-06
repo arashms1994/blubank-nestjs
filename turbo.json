@@ -11,13 +11,21 @@
     "dev": {
       "cache": false,
       "persistent": true,
-      "env": ["NEXT_PUBLIC_*", "VITE_*", "HOST", "CORS_ORIGINS", "TRUST_PROXY", "BODY_LIMIT_BYTES"]
+      "env": [
+        "NEXT_PUBLIC_*",
+        "VITE_*",
+        "HOST",
+        "CORS_ORIGINS",
+        "TRUST_PROXY",
+        "BODY_LIMIT_BYTES",
+        "LOG_LEVEL"
+      ]
     },
     "start": {
       "dependsOn": ["build"],
       "cache": false,
       "persistent": true,
-      "env": ["PORT", "HOST", "CORS_ORIGINS", "TRUST_PROXY", "BODY_LIMIT_BYTES"]
+      "env": ["PORT", "HOST", "CORS_ORIGINS", "TRUST_PROXY", "BODY_LIMIT_BYTES", "LOG_LEVEL"]
     },
     "lint": {
       "dependsOn": ["^lint"],
@@ -29,7 +37,8 @@
       "inputs": ["$TURBO_DEFAULT$", "!**/.next/**", "!**/dist/**"]
     },
     "test": {
-      "dependsOn": ["^test"]
+      "dependsOn": ["^test"],
+      "env": ["NODE_ENV", "CORS_ORIGINS", "LOG_LEVEL"]
     },
     "clean": {
       "cache": false

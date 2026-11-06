@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'production']).default('development'),
+    LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
     HOST: z.string().min(1).default('0.0.0.0'),
     PORT: z.coerce.number().int().min(1).max(65535).positive().default(4000),
     BODY_LIMIT_BYTES: z.coerce.number().int().min(1).max(1_048_576).default(1_048_576),
@@ -28,7 +29,11 @@ export const envSchema = z
         message: 'At least one origin is required in production',
       });
     }
-  });
+  })
+  .transform((env) => ({
+    ...env,
+    LOG_LEVEL: env.LOG_LEVEL ?? (env.NODE_ENV === 'development' ? 'debug' : 'info'),
+  }));
 
 export type Env = z.infer<typeof envSchema>;
 

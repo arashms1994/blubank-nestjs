@@ -4,6 +4,7 @@ describe('validateEnv', () => {
   it('parses defaults for an empty environment', () => {
     expect(validateEnv({})).toEqual({
       NODE_ENV: 'development',
+      LOG_LEVEL: 'debug',
       HOST: '0.0.0.0',
       PORT: 4000,
       BODY_LIMIT_BYTES: 1_048_576,
@@ -14,6 +15,13 @@ describe('validateEnv', () => {
 
   it('coerces a valid port to a number', () => {
     expect(validateEnv({ PORT: '4100' }).PORT).toBe(4100);
+  });
+
+  it('defaults production logging to info and accepts a configured level', () => {
+    expect(
+      validateEnv({ NODE_ENV: 'production', CORS_ORIGINS: 'https://app.example' }).LOG_LEVEL,
+    ).toBe('info');
+    expect(validateEnv({ LOG_LEVEL: 'warn' }).LOG_LEVEL).toBe('warn');
   });
 
   it('accepts a smaller body limit and rejects values above 1 MB', () => {

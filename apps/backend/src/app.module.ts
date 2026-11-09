@@ -7,6 +7,7 @@ import { HttpExceptionFilter } from './common/http-exception.filter';
 import type { Env } from './config/env.schema';
 import { validateEnv } from './config/env.schema';
 import { getPinoOptions } from './config/logging';
+import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -26,6 +27,7 @@ import { HealthController } from './health.controller';
         useExisting: true,
       }),
     }),
+    EnrollmentsModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_FILTER, useClass: HttpExceptionFilter }],

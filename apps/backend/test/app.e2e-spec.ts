@@ -129,6 +129,30 @@ describe('HTTP conventions (e2e)', () => {
       .expect({ count: 3 });
   });
 
+  it('generates an OTP for an Iranian mobile number', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/enrollments/otp')
+      .send({ phoneNumber: '09123456789' })
+      .expect(201);
+    const body = z
+      .object({ phoneNumber: z.string(), otp: z.number().int().min(100_000).max(999_999) })
+      .parse(response.body as unknown);
+
+    expect(body.phoneNumber).toBe('09123456789');
+  });
+
+  it('rejects an invalid Iranian mobile number', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/enrollments/otp')
+      .send({ phoneNumber: '123456789' })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      error: 'VALIDATION_FAILED',
+      details: [{ path: ['phoneNumber'] }],
+    });
+  });
+
   it('returns structured validation errors', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/test/body')

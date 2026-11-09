@@ -53,7 +53,7 @@ async function bootstrap() {
   app.enableCors({ origin: config.get('CORS_ORIGINS') });
 
   await app.listen(config.get('PORT'), config.get('HOST'), () => {
-    logger.log('Application is running', 'Bootstrap');
+    logger.log(`Application is running on port: ${config.get('PORT')}`, 'Bootstrap');
   });
 }
 void bootstrap();

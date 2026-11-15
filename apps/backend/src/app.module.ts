@@ -4,6 +4,7 @@ import { APP_FILTER } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 
 import { HttpExceptionFilter } from './common/http-exception.filter';
+import { RedisModule } from './common/redis/redis.module.js';
 import type { Env } from './config/env.schema';
 import { validateEnv } from './config/env.schema';
 import { getPinoOptions } from './config/logging';
@@ -14,6 +15,7 @@ import { HealthController } from './health.controller';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: [`.env.${process.env.NODE_ENV ?? 'development'}`, '.env'],
       validate: validateEnv,
     }),
     LoggerModule.forRootAsync({
@@ -27,6 +29,7 @@ import { HealthController } from './health.controller';
         useExisting: true,
       }),
     }),
+    RedisModule,
     EnrollmentsModule,
   ],
   controllers: [HealthController],

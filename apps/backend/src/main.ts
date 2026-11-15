@@ -2,7 +2,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Http2ServerRequest } from 'node:http2';
 
 import { RequestMethod, VersioningType } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger } from 'nestjs-pino';
@@ -10,10 +10,16 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { getRequestId } from './common/request-id';
 import type { Env } from './config/env.schema';
+import { validateEnv } from './config/env.schema';
 import { getPinoOptions } from './config/logging';
 
 async function bootstrap() {
-  const configContext = await NestFactory.createApplicationContext(AppModule, { logger: false });
+  const configModule = await ConfigModule.forRoot({
+    isGlobal: true,
+    envFilePath: [`.env.${process.env.NODE_ENV ?? 'development'}`, '.env'],
+    validate: validateEnv,
+  });
+  const configContext = await NestFactory.createApplicationContext(configModule, { logger: false });
   const initialConfig = configContext.get<ConfigService<Env, true>>(ConfigService);
   const adapter = new FastifyAdapter({
     // trustProxy controls whether forwarded headers are trusted when Fastify determines request.ip.

@@ -18,14 +18,31 @@
         "CORS_ORIGINS",
         "TRUST_PROXY",
         "BODY_LIMIT_BYTES",
-        "LOG_LEVEL"
+        "LOG_LEVEL",
+        "REDIS_HOST",
+        "REDIS_PORT",
+        "REDIS_PASSWORD",
+        "REDIS_DB",
+        "REDIS_KEY_PREFIX"
       ]
     },
     "start": {
       "dependsOn": ["build"],
       "cache": false,
       "persistent": true,
-      "env": ["PORT", "HOST", "CORS_ORIGINS", "TRUST_PROXY", "BODY_LIMIT_BYTES", "LOG_LEVEL"]
+      "env": [
+        "PORT",
+        "HOST",
+        "CORS_ORIGINS",
+        "TRUST_PROXY",
+        "BODY_LIMIT_BYTES",
+        "LOG_LEVEL",
+        "REDIS_HOST",
+        "REDIS_PORT",
+        "REDIS_PASSWORD",
+        "REDIS_DB",
+        "REDIS_KEY_PREFIX"
+      ]
     },
     "lint": {
       "dependsOn": ["^lint"],

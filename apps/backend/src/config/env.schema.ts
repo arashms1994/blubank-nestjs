@@ -6,6 +6,11 @@ export const envSchema = z
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
     HOST: z.string().min(1).default('0.0.0.0'),
     PORT: z.coerce.number().int().min(1).max(65535).positive().default(4000),
+    REDIS_HOST: z.string().min(1).default('localhost'),
+    REDIS_PORT: z.coerce.number().int().min(1).max(65535).default(6379),
+    REDIS_PASSWORD: z.string().optional(),
+    REDIS_DB: z.coerce.number().int().min(0).default(0),
+    REDIS_KEY_PREFIX: z.string().default(''),
     BODY_LIMIT_BYTES: z.coerce.number().int().min(1).max(1_048_576).default(1_048_576),
     CORS_ORIGINS: z
       .string()

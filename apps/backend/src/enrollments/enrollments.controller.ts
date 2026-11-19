@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { z } from 'zod';
 
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
@@ -14,8 +14,9 @@ type OtpRequest = z.infer<typeof otpRequestSchema>;
 export class EnrollmentsController {
   constructor(private readonly enrollmentsService: EnrollmentsService) {}
 
-  @Post('otp')
-  generateOtp(@Body(new ZodValidationPipe(otpRequestSchema)) body: OtpRequest) {
-    return this.enrollmentsService.generateOtp(body.phoneNumber);
+  @Post('challenge')
+  @HttpCode(HttpStatus.OK)
+  createChallenge(@Body(new ZodValidationPipe(otpRequestSchema)) body: OtpRequest): Promise<void> {
+    return this.enrollmentsService.createChallenge(body.phoneNumber);
   }
 }

@@ -13,12 +13,14 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test, TestingModule } from '@nestjs/testing';
+import type Redis from 'ioredis';
 import { Logger } from 'nestjs-pino';
 import request from 'supertest';
 import { z } from 'zod';
 
 import { AppModule } from './../src/app.module';
 import { AppException } from './../src/common/app-exception';
+import { REDIS_CLIENT } from './../src/common/redis/redis.constants.js';
 import { getRequestId } from './../src/common/request-id';
 import { ZodValidationPipe } from './../src/common/zod-validation.pipe';
 import type { Env } from './../src/config/env.schema';
@@ -49,12 +51,24 @@ class E2eController {
 
 describe('HTTP conventions (e2e)', () => {
   let app: NestFastifyApplication;
+  let redisSet: jest.Mock<Promise<string>, [key: string, value: string, expiry: 'EX', ttl: number]>;
 
   beforeEach(async () => {
+    redisSet = jest.fn<Promise<string>, [string, string, 'EX', number]>().mockResolvedValue('OK');
+    const redisClient = {
+      status: 'ready',
+      options: { keyPrefix: '' },
+      set: redisSet,
+      quit: jest.fn(() => Promise.resolve('OK')),
+      disconnect: jest.fn(),
+    } as unknown as Redis;
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
       controllers: [E2eController],
-    }).compile();
+    })
+      .overrideProvider(REDIS_CLIENT)
+      .useValue(redisClient)
+      .compile();
 
     const config = moduleFixture.get<ConfigService<Env, true>>(ConfigService);
     app = moduleFixture.createNestApplication<NestFastifyApplication>(
@@ -89,17 +103,25 @@ describe('HTTP conventions (e2e)', () => {
   });
 
   it('/health (GET)', () => {
-    return request(app.getHttpServer()).get('/health').expect(200).expect({ status: 'ok' });
+    return request(app.getHttpServer())
+      .get('/health')
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          success: true,
+          data: { status: 'ok' },
+          meta: { requestId: response.headers['x-request-id'] },
+        });
+      });
   });
 
   it('returns formatted Nest errors for an unknown versioned API route', async () => {
     const response = await request(app.getHttpServer()).get('/api/v1/unknown').expect(404);
 
     expect(response.body).toMatchObject({
-      statusCode: 404,
-      error: 'NotFoundException',
-      path: '/api/v1/unknown',
-      requestId: response.headers['x-request-id'],
+      success: false,
+      error: { code: 'NotFoundException' },
+      meta: { path: '/api/v1/unknown', requestId: response.headers['x-request-id'] },
     });
   });
 
@@ -126,30 +148,43 @@ describe('HTTP conventions (e2e)', () => {
       .post('/api/v1/test/body')
       .send({ count: '3' })
       .expect(201)
-      .expect({ count: 3 });
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          success: true,
+          data: { count: 3 },
+          meta: { path: '/api/v1/test/body' },
+        });
+      });
   });
 
-  it('generates an OTP for an Iranian mobile number', async () => {
+  it('stores a string OTP with a two-minute TTL and does not return it', async () => {
     const response = await request(app.getHttpServer())
-      .post('/api/v1/enrollments/otp')
+      .post('/api/v1/enrollments/challenge')
       .send({ phoneNumber: '09123456789' })
-      .expect(201);
-    const body = z
-      .object({ phoneNumber: z.string(), otp: z.number().int().min(100_000).max(999_999) })
-      .parse(response.body as unknown);
+      .expect(200);
 
-    expect(body.phoneNumber).toBe('09123456789');
+    expect(response.body).toMatchObject({ success: true, data: null });
+    expect(JSON.stringify(response.body)).not.toMatch(/\b\d{6}\b/);
+    expect(redisSet).toHaveBeenCalledWith(
+      'enrollments:challenge:09123456789',
+      expect.stringMatching(/^\d{6}$/),
+      'EX',
+      120,
+    );
   });
 
   it('rejects an invalid Iranian mobile number', async () => {
     const response = await request(app.getHttpServer())
-      .post('/api/v1/enrollments/otp')
+      .post('/api/v1/enrollments/challenge')
       .send({ phoneNumber: '123456789' })
       .expect(400);
 
     expect(response.body).toMatchObject({
-      error: 'VALIDATION_FAILED',
-      details: [{ path: ['phoneNumber'] }],
+      success: false,
+      error: {
+        code: 'VALIDATION_FAILED',
+        details: [{ path: ['phoneNumber'] }],
+      },
     });
   });
 
@@ -161,34 +196,36 @@ describe('HTTP conventions (e2e)', () => {
     const responseBody: unknown = response.body;
     const body = z
       .object({
-        statusCode: z.number(),
-        error: z.string(),
-        details: z.array(
-          z.object({ path: z.array(z.union([z.string(), z.number()])), message: z.string() }),
-        ),
-        path: z.string(),
-        timestamp: z.string(),
-        requestId: z.string(),
+        success: z.literal(false),
+        error: z.object({
+          code: z.string(),
+          details: z.array(
+            z.object({ path: z.array(z.union([z.string(), z.number()])), message: z.string() }),
+          ),
+        }),
+        meta: z.object({
+          path: z.string(),
+          timestamp: z.string(),
+          requestId: z.string(),
+        }),
       })
       .parse(responseBody);
 
-    expect(body.statusCode).toBe(400);
-    expect(body.error).toBe('VALIDATION_FAILED');
-    expect(body.details[0]?.path).toEqual(['count']);
-    expect(body.details[0]?.message).toEqual(expect.any(String));
-    expect(body.path).toBe('/api/v1/test/body');
-    expect(body.requestId).toBe(response.headers['x-request-id']);
-    expect(body.timestamp).not.toBe('');
+    expect(body.error.code).toBe('VALIDATION_FAILED');
+    expect(body.error.details[0]?.path).toEqual(['count']);
+    expect(body.error.details[0]?.message).toEqual(expect.any(String));
+    expect(body.meta.path).toBe('/api/v1/test/body');
+    expect(body.meta.requestId).toBe(response.headers['x-request-id']);
+    expect(body.meta.timestamp).not.toBe('');
   });
 
   it('preserves an AppException code and includes the request id', async () => {
     const response = await request(app.getHttpServer()).get('/api/v1/test/app-error').expect(409);
 
     expect(response.body).toMatchObject({
-      statusCode: 409,
-      error: 'TEST_FAILURE',
-      message: 'Controlled test error',
-      requestId: response.headers['x-request-id'],
+      success: false,
+      error: { code: 'TEST_FAILURE', message: 'Controlled test error' },
+      meta: { requestId: response.headers['x-request-id'] },
     });
   });
 
@@ -196,10 +233,9 @@ describe('HTTP conventions (e2e)', () => {
     const response = await request(app.getHttpServer()).get('/api/v1/test/plain-error').expect(500);
 
     expect(response.body).toMatchObject({
-      statusCode: 500,
-      error: 'INTERNAL_ERROR',
-      message: 'An unexpected error occurred',
-      requestId: response.headers['x-request-id'],
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' },
+      meta: { requestId: response.headers['x-request-id'] },
     });
     expect(JSON.stringify(response.body)).not.toContain('private internal detail');
   });

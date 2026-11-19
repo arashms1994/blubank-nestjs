@@ -36,6 +36,10 @@ export class RedisService {
     await this.client.set(key, serializedValue, 'EX', ttlSeconds);
   }
 
+  async setString(key: string, value: string, ttlSeconds: number): Promise<void> {
+    await this.client.set(key, value, 'EX', ttlSeconds);
+  }
+
   async del(...keys: string[]): Promise<number> {
     if (keys.length === 0) {
       return 0;

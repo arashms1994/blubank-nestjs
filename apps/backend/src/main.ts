@@ -5,6 +5,7 @@ import { RequestMethod, VersioningType } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 
 import { AppModule } from './app.module';
@@ -57,6 +58,25 @@ async function bootstrap() {
     defaultVersion: '1',
   });
   app.enableCors({ origin: config.get('CORS_ORIGINS') });
+
+  if (config.get('NODE_ENV') === 'development') {
+    const swaggerConfig = new DocumentBuilder().setTitle('Blue Bank API').setVersion('1.0').build();
+    const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig, {
+      deepScanRoutes: true,
+      operationIdFactory: (controllerKey, methodKey) => `${controllerKey}_${methodKey}`,
+    });
+
+    SwaggerModule.setup('swagger', app, swaggerDocument, {
+      jsonDocumentUrl: 'swagger-json',
+      yamlDocumentUrl: 'swagger-yaml',
+      swaggerOptions: {
+        docExpansion: 'none',
+        filter: true,
+        showRequestDuration: true,
+        tryItOutEnabled: true,
+      },
+    });
+  }
 
   await app.listen(config.get('PORT'), config.get('HOST'), () => {
     logger.log(`Application is running on port: ${config.get('PORT')}`, 'Bootstrap');

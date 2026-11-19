@@ -242,3 +242,30 @@
 - تغییر مسیر و رفتار endpoint، همراه با قالب موفق و Redis، قرارداد API را نسبت به `ADR-008` تغییر می‌دهد و کلاینت‌ها باید با آن هماهنگ شوند.
 - دسترس‌پذیری Redis برای ایجاد چالش ثبت‌نام لازم می‌شود و OTP تا پایان TTL در Redis باقی می‌ماند.
 - نمایش پیام و جزئیات `AppException` مسئولیت انتخاب محتوای امن و مناسب برای کلاینت را بر عهدهٔ سازندهٔ آن exception می‌گذارد.
+
+---
+
+## ADR-011: مستندسازی API با Swagger رسمی NestJS
+
+- **وضعیت:** پذیرفته‌شده
+- **تاریخ:** 2026-11-19
+
+### دلیل
+
+- تیم به مستندات تعاملی و specificationهای JSON و YAML برای API بک‌اند نیاز دارد.
+- مستندات Swagger باید در محیط توسعه در دسترس باشد و در محیط‌های دیگر ارائه نشود.
+- تعریف دستی schema برای DTOها تکراری است و باید تا حد ممکن از typeها، توضیحات و decoratorهای اعتبارسنجی استخراج شود.
+
+### راه‌حل
+
+- از `@nestjs/swagger` و `SwaggerModule.setup()` برای ساخت specification و UI رسمی Swagger استفاده شود؛ در Fastify، وابستگی `@fastify/static` برای سرو فایل‌های UI فراهم شود.
+- مستندات در مسیرهای `/api/docs`، `/api/docs-json` و `/api/docs-yaml` فقط در `NODE_ENV=development` فعال شوند؛ تنظیمات شامل `deepScanRoutes: true` و شناسهٔ عملیات به شکل `${controllerKey}_${methodKey}` باشد.
+- گزینه‌های UI شامل حفظ مجوزدهی، بسته‌بودن گروه‌ها به‌صورت پیش‌فرض، جست‌وجو، زمان پاسخ و فعال‌بودن Try it out باشند.
+- افزونهٔ compiler رسمی Nest در `nest-cli.json` با `classValidatorShim`، `introspectComments` و suffixهای DTO و controller پیکربندی شود تا metadata از typeها، JSDoc و `class-validator` استخراج شود.
+- decoratorهای مشترک `@ApiPaginatedResponse` و `@ApiAuth` برای مستندسازی پاسخ صفحه‌بندی‌شده و احراز هویت تعریف شوند؛ از UIهای جایگزین و setupهای Express استفاده نشود.
+
+### هزینه
+
+- بک‌اند به `@nestjs/swagger` و `@fastify/static` وابسته می‌شود و پیکربندی Nest CLI باید با افزونهٔ Swagger هماهنگ بماند.
+- جزئیات DTOها و توضیحاتشان بخشی از specification قابل‌مشاهده در توسعه می‌شود و باید از درج دادهٔ حساس در commentها جلوگیری شود.
+- UI و specification در محیط‌های غیرتوسعه‌ای در دسترس نیستند؛ برای بررسی مستندات در آن محیط‌ها باید از اجرای development یا خروجی specification استفاده شود.

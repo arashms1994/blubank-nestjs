@@ -13,7 +13,14 @@ export class EnrollmentsService {
 
   async createChallenge(phoneNumber: string): Promise<void> {
     const otp = String(randomInt(100_000, 1_000_000));
-    await this.redisService.setString(`enrollments:challenge:${phoneNumber}`, otp, OTP_TTL_SECONDS);
+    const key = `enrollments:challenge:${phoneNumber}`;
+    const created = await this.redisService.setNx(key, otp, OTP_TTL_SECONDS);
+
+    if (!created) {
+      return;
+    }
+
+    // TODO: Send the challenge code by SMS.
   }
 
   async verify(phoneNumber: string, otp: string): Promise<void> {

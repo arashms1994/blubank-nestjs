@@ -19,6 +19,7 @@ Only the project owner adds rules to this section. Don't invent new ones.
 - In `apps/backend`, write every human-readable message passed to `AppException` in Persian. Keep machine-readable error codes and technical identifiers in their established form; do not expose internal or sensitive details in the message.
 - Never loosen strictness to silence an error. Fix the root cause.
 - Every app has the same script names: `dev`, `build`, `start`, `lint`, `typecheck`, `test`, `clean`. An app without tests must still exit successfully on `test`.
+- The happy path of every method runs at its end. Conditions act only as guards: check the opposite case and exit early, instead of wrapping the main flow in an `if`.
 - Don't create a shared UI package (`@repo/ui`). frontend and admin have different component sets.
 - Write the app's setup configuration inline in `main.ts`. Don't create separate setup files such as `app.setup.ts` or `http.ts`.
 - Each app's `.env.example` contains only what is needed to boot. Don't add env-validation code unless asked.

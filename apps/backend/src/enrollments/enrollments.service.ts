@@ -17,7 +17,11 @@ export class EnrollmentsService {
     const created = await this.redisService.setNx(key, otp, OTP_TTL_SECONDS);
 
     if (!created) {
-      return;
+      throw new AppException(
+        'OTP_ALREADY_SENT',
+        HttpStatus.TOO_MANY_REQUESTS,
+        'کد تأیید قبلاً ارسال شده است. لطفاً کمی بعد دوباره تلاش کنید',
+      );
     }
 
     // TODO: Send the challenge code by SMS.

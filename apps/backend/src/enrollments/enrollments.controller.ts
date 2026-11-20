@@ -15,7 +15,12 @@ const otpRequestSchema = z.object({
   phoneNumber: z.string().regex(/^09\d{9}$/, 'Must be a valid Iranian mobile number'),
 });
 
+const otpVerificationSchema = otpRequestSchema.extend({
+  otp: z.string().regex(/^\d{6}$/, 'Must be a six-digit OTP'),
+});
+
 type OtpRequest = z.infer<typeof otpRequestSchema>;
+type OtpVerification = z.infer<typeof otpVerificationSchema>;
 
 @ApiTags('enrollments')
 @Controller('enrollments')
@@ -44,5 +49,28 @@ export class EnrollmentsController {
   })
   createChallenge(@Body(new ZodValidationPipe(otpRequestSchema)) body: OtpRequest): Promise<void> {
     return this.enrollmentsService.createChallenge(body.phoneNumber);
+  }
+
+  @Post('verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify an enrollment OTP' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        phoneNumber: {
+          type: 'string',
+          description: 'Iranian mobile number in 09xxxxxxxxx format.',
+          pattern: '^09\\d{9}$',
+        },
+        otp: { type: 'string', description: 'Six-digit OTP.', pattern: '^\\d{6}$' },
+      },
+      required: ['phoneNumber', 'otp'],
+    },
+  })
+  @ApiOkResponse({ description: 'The OTP was verified.' })
+  @ApiBadRequestResponse({ description: 'The OTP is invalid or expired.' })
+  verify(@Body(new ZodValidationPipe(otpVerificationSchema)) body: OtpVerification): Promise<void> {
+    return this.enrollmentsService.verify(body.phoneNumber, body.otp);
   }
 }

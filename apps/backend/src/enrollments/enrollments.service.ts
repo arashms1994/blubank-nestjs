@@ -1,7 +1,8 @@
 import { randomInt } from 'node:crypto';
 
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 
+import { AppException } from '../common/app-exception.js';
 import { RedisService } from '../common/redis/redis.service.js';
 
 const OTP_TTL_SECONDS = 120;
@@ -13,5 +14,20 @@ export class EnrollmentsService {
   async createChallenge(phoneNumber: string): Promise<void> {
     const otp = String(randomInt(100_000, 1_000_000));
     await this.redisService.setString(`enrollments:challenge:${phoneNumber}`, otp, OTP_TTL_SECONDS);
+  }
+
+  async verify(phoneNumber: string, otp: string): Promise<void> {
+    const key = `enrollments:challenge:${phoneNumber}`;
+    const challenge = await this.redisService.getString(key);
+
+    if (challenge === null || challenge !== otp) {
+      throw new AppException(
+        'INVALID_OR_EXPIRED_OTP',
+        HttpStatus.BAD_REQUEST,
+        'کد وارد شده صحیح نیست یا منقضی شده است',
+      );
+    }
+
+    await this.redisService.del(key);
   }
 }

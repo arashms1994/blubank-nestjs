@@ -52,13 +52,19 @@ class E2eController {
 describe('HTTP conventions (e2e)', () => {
   let app: NestFastifyApplication;
   let redisSet: jest.Mock<Promise<string>, [key: string, value: string, expiry: 'EX', ttl: number]>;
+  let redisGet: jest.Mock<Promise<string | null>, [key: string]>;
+  let redisUnlink: jest.Mock<Promise<number>, [key: string]>;
 
   beforeEach(async () => {
     redisSet = jest.fn<Promise<string>, [string, string, 'EX', number]>().mockResolvedValue('OK');
+    redisGet = jest.fn<Promise<string | null>, [string]>().mockResolvedValue(null);
+    redisUnlink = jest.fn<Promise<number>, [string]>().mockResolvedValue(1);
     const redisClient = {
       status: 'ready',
       options: { keyPrefix: '' },
       set: redisSet,
+      get: redisGet,
+      unlink: redisUnlink,
       quit: jest.fn(() => Promise.resolve('OK')),
       disconnect: jest.fn(),
     } as unknown as Redis;
@@ -186,6 +192,41 @@ describe('HTTP conventions (e2e)', () => {
         details: [{ path: ['phoneNumber'] }],
       },
     });
+  });
+
+  it.each([
+    ['missing or expired', null],
+    ['incorrect', '654321'],
+  ])('returns the same generic error for a %s OTP', async (_state, storedOtp) => {
+    redisGet.mockResolvedValue(storedOtp);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/enrollments/verify')
+      .send({ phoneNumber: '09123456789', otp: '123456' })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      success: false,
+      error: {
+        code: 'INVALID_OR_EXPIRED_OTP',
+        message: 'کد وارد شده صحیح نیست یا منقضی شده است',
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain('details');
+    expect(redisGet).toHaveBeenCalledWith('enrollments:challenge:09123456789');
+    expect(redisUnlink).not.toHaveBeenCalled();
+  });
+
+  it('accepts and consumes a valid OTP', async () => {
+    redisGet.mockResolvedValue('123456');
+
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/enrollments/verify')
+      .send({ phoneNumber: '09123456789', otp: '123456' })
+      .expect(200);
+
+    expect(response.body).toMatchObject({ success: true, data: null });
+    expect(redisUnlink).toHaveBeenCalledWith('enrollments:challenge:09123456789');
   });
 
   it('returns structured validation errors', async () => {

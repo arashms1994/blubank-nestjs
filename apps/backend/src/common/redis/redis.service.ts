@@ -40,6 +40,10 @@ export class RedisService {
     await this.client.set(key, value, 'EX', ttlSeconds);
   }
 
+  async getString(key: string): Promise<string | null> {
+    return this.client.get(key);
+  }
+
   async del(...keys: string[]): Promise<number> {
     if (keys.length === 0) {
       return 0;

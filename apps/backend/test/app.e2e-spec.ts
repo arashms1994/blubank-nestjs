@@ -40,7 +40,7 @@ class E2eController {
 
   @Get('app-error')
   throwAppException(): never {
-    throw new AppException('TEST_FAILURE', HttpStatus.CONFLICT, 'Controlled test error');
+    throw new AppException('TEST_FAILURE', HttpStatus.CONFLICT, 'خطای آزمایشی کنترل‌شده');
   }
 
   @Get('plain-error')
@@ -51,12 +51,17 @@ class E2eController {
 
 describe('HTTP conventions (e2e)', () => {
   let app: NestFastifyApplication;
-  let redisSet: jest.Mock<Promise<string>, [key: string, value: string, expiry: 'EX', ttl: number]>;
+  let redisSet: jest.Mock<
+    Promise<string>,
+    [key: string, value: string, expiry: 'EX', ttl: number, condition: 'NX']
+  >;
   let redisGet: jest.Mock<Promise<string | null>, [key: string]>;
   let redisUnlink: jest.Mock<Promise<number>, [key: string]>;
 
   beforeEach(async () => {
-    redisSet = jest.fn<Promise<string>, [string, string, 'EX', number]>().mockResolvedValue('OK');
+    redisSet = jest
+      .fn<Promise<string>, [string, string, 'EX', number, 'NX']>()
+      .mockResolvedValue('OK');
     redisGet = jest.fn<Promise<string | null>, [string]>().mockResolvedValue(null);
     redisUnlink = jest.fn<Promise<number>, [string]>().mockResolvedValue(1);
     const redisClient = {
@@ -126,7 +131,7 @@ describe('HTTP conventions (e2e)', () => {
 
     expect(response.body).toMatchObject({
       success: false,
-      error: { code: 'NotFoundException' },
+      error: { code: 'REQUEST_FAILED', message: 'درخواست قابل انجام نیست' },
       meta: { path: '/api/v1/unknown', requestId: response.headers['x-request-id'] },
     });
   });
@@ -176,6 +181,7 @@ describe('HTTP conventions (e2e)', () => {
       expect.stringMatching(/^\d{6}$/),
       'EX',
       120,
+      'NX',
     );
   });
 
@@ -188,10 +194,29 @@ describe('HTTP conventions (e2e)', () => {
     expect(response.body).toMatchObject({
       success: false,
       error: {
-        code: 'VALIDATION_FAILED',
-        details: [{ path: ['phoneNumber'] }],
+        code: 'REQUEST_FAILED',
+        message: 'شماره همراه یا کد تأیید صحیح نمی‌باشد',
       },
     });
+    expect(JSON.stringify(response.body)).not.toContain('details');
+    expect(JSON.stringify(response.body)).not.toContain('phoneNumber');
+  });
+
+  it('uses the same generic message for an invalid OTP format', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/enrollments/verify')
+      .send({ phoneNumber: '09123456789', otp: '123' })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      success: false,
+      error: {
+        code: 'REQUEST_FAILED',
+        message: 'شماره همراه یا کد تأیید صحیح نمی‌باشد',
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain('details');
+    expect(JSON.stringify(response.body)).not.toContain('otp');
   });
 
   it.each([
@@ -208,7 +233,7 @@ describe('HTTP conventions (e2e)', () => {
     expect(response.body).toMatchObject({
       success: false,
       error: {
-        code: 'INVALID_OR_EXPIRED_OTP',
+        code: 'REQUEST_FAILED',
         message: 'کد وارد شده صحیح نیست یا منقضی شده است',
       },
     });
@@ -240,9 +265,7 @@ describe('HTTP conventions (e2e)', () => {
         success: z.literal(false),
         error: z.object({
           code: z.string(),
-          details: z.array(
-            z.object({ path: z.array(z.union([z.string(), z.number()])), message: z.string() }),
-          ),
+          message: z.string(),
         }),
         meta: z.object({
           path: z.string(),
@@ -252,20 +275,21 @@ describe('HTTP conventions (e2e)', () => {
       })
       .parse(responseBody);
 
-    expect(body.error.code).toBe('VALIDATION_FAILED');
-    expect(body.error.details[0]?.path).toEqual(['count']);
-    expect(body.error.details[0]?.message).toEqual(expect.any(String));
+    expect(body.error.code).toBe('REQUEST_FAILED');
+    expect(body.error.message).toBe('اطلاعات ارسال‌شده معتبر نیست');
+    expect(JSON.stringify(body.error)).not.toContain('details');
+    expect(JSON.stringify(body.error)).not.toContain('count');
     expect(body.meta.path).toBe('/api/v1/test/body');
     expect(body.meta.requestId).toBe(response.headers['x-request-id']);
     expect(body.meta.timestamp).not.toBe('');
   });
 
-  it('preserves an AppException code and includes the request id', async () => {
+  it('returns a generic AppException response and includes the request id', async () => {
     const response = await request(app.getHttpServer()).get('/api/v1/test/app-error').expect(409);
 
     expect(response.body).toMatchObject({
       success: false,
-      error: { code: 'TEST_FAILURE', message: 'Controlled test error' },
+      error: { code: 'REQUEST_FAILED', message: 'خطای آزمایشی کنترل‌شده' },
       meta: { requestId: response.headers['x-request-id'] },
     });
   });
@@ -275,7 +299,7 @@ describe('HTTP conventions (e2e)', () => {
 
     expect(response.body).toMatchObject({
       success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' },
+      error: { code: 'INTERNAL_ERROR', message: 'خطای داخلی رخ داد' },
       meta: { requestId: response.headers['x-request-id'] },
     });
     expect(JSON.stringify(response.body)).not.toContain('private internal detail');

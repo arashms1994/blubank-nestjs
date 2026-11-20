@@ -11,12 +11,14 @@ import { z } from 'zod';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { EnrollmentsService } from './enrollments.service';
 
+const INVALID_ENROLLMENT_INPUT_MESSAGE = 'شماره همراه یا کد تأیید صحیح نمی‌باشد';
+
 const otpRequestSchema = z.object({
-  phoneNumber: z.string().regex(/^09\d{9}$/, 'Must be a valid Iranian mobile number'),
+  phoneNumber: z.string().regex(/^09\d{9}$/, INVALID_ENROLLMENT_INPUT_MESSAGE),
 });
 
 const otpVerificationSchema = otpRequestSchema.extend({
-  otp: z.string().regex(/^\d{6}$/, 'Must be a six-digit OTP'),
+  otp: z.string().regex(/^\d{6}$/, INVALID_ENROLLMENT_INPUT_MESSAGE),
 });
 
 type OtpRequest = z.infer<typeof otpRequestSchema>;
@@ -47,7 +49,10 @@ export class EnrollmentsController {
   @ApiBadRequestResponse({
     description: 'The phone number is not a valid Iranian mobile number.',
   })
-  createChallenge(@Body(new ZodValidationPipe(otpRequestSchema)) body: OtpRequest): Promise<void> {
+  createChallenge(
+    @Body(new ZodValidationPipe(otpRequestSchema, INVALID_ENROLLMENT_INPUT_MESSAGE))
+    body: OtpRequest,
+  ): Promise<void> {
     return this.enrollmentsService.createChallenge(body.phoneNumber);
   }
 
@@ -70,7 +75,10 @@ export class EnrollmentsController {
   })
   @ApiOkResponse({ description: 'The OTP was verified.' })
   @ApiBadRequestResponse({ description: 'The OTP is invalid or expired.' })
-  verify(@Body(new ZodValidationPipe(otpVerificationSchema)) body: OtpVerification): Promise<void> {
+  verify(
+    @Body(new ZodValidationPipe(otpVerificationSchema, INVALID_ENROLLMENT_INPUT_MESSAGE))
+    body: OtpVerification,
+  ): Promise<void> {
     return this.enrollmentsService.verify(body.phoneNumber, body.otp);
   }
 }

@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { PinoLogger } from 'nestjs-pino';
-import { ZodError } from 'zod';
 
 import { type ApiErrorResponse, createErrorResponse, createResponseMetadata } from './api-response';
 import { AppException } from './app-exception';
@@ -25,23 +24,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const metadata = createResponseMetadata(request);
     let response: ApiErrorResponse;
     let statusCode: number;
-    if (exception instanceof ZodError) {
-      statusCode = HttpStatus.BAD_REQUEST;
-      response = createErrorResponse(
-        {
-          code: 'VALIDATION_FAILED',
-          message: 'Request validation failed',
-          details: exception.issues.map(({ path, message }) => ({ path, message })),
-        },
-        metadata,
-      );
-    } else if (exception instanceof AppException) {
+    if (exception instanceof AppException) {
       statusCode = exception.getStatus();
       response = createErrorResponse(
         {
-          code: exception.code,
+          code: 'REQUEST_FAILED',
           message: exception.message,
-          ...(exception.details === undefined ? {} : { details: exception.details }),
         },
         metadata,
       );
@@ -50,15 +38,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
       if (statusCode < 500) {
         response = createErrorResponse(
           {
-            code: exception.name,
-            message: getClientMessage(exception),
+            code: 'REQUEST_FAILED',
+            message: 'درخواست قابل انجام نیست',
           },
           metadata,
         );
       } else {
         this.logger.error({ err: exception }, 'Unhandled server HTTP error');
         response = createErrorResponse(
-          { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' },
+          { code: 'INTERNAL_ERROR', message: 'خطای داخلی رخ داد' },
           metadata,
         );
       }
@@ -66,28 +54,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
       this.logger.error({ err: exception }, 'Unhandled request error');
       statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
       response = createErrorResponse(
-        { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' },
+        { code: 'INTERNAL_ERROR', message: 'خطای داخلی رخ داد' },
         metadata,
       );
     }
 
     void reply.status(statusCode).send(response);
   }
-}
-
-function getClientMessage(exception: HttpException): string {
-  const response = exception.getResponse();
-  if (typeof response === 'string') {
-    return response;
-  }
-  if (typeof response === 'object' && response !== null && 'message' in response) {
-    const message = response.message;
-    if (typeof message === 'string') {
-      return message;
-    }
-    if (Array.isArray(message) && message.every((item: unknown) => typeof item === 'string')) {
-      return message.join(', ');
-    }
-  }
-  return exception.message;
 }

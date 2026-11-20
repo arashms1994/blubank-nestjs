@@ -5,7 +5,6 @@ export class AppException extends HttpException {
     readonly code: string,
     status: HttpStatus,
     message: string,
-    readonly details?: unknown,
   ) {
     super(message, status);
   }

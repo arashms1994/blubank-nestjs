@@ -6,6 +6,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { minutes, Throttle } from '@nestjs/throttler';
 import { z } from 'zod';
 
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
@@ -32,6 +33,7 @@ export class EnrollmentsController {
   @Post('challenge')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Create an enrollment challenge' })
+  @Throttle({ default: { limit: 5, ttl: minutes(1) } })
   @ApiBody({
     schema: {
       type: 'object',
@@ -59,6 +61,7 @@ export class EnrollmentsController {
   @Post('verify')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify an enrollment OTP' })
+  @Throttle({ default: { limit: 5, ttl: minutes(2) } })
   @ApiBody({
     schema: {
       type: 'object',

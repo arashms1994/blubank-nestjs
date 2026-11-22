@@ -53,27 +53,15 @@ class E2eController {
 
 describe('HTTP conventions (e2e)', () => {
   let app: NestFastifyApplication;
-  let redisSet: jest.Mock<
-    Promise<string>,
-    [key: string, value: string, expiry: 'EX', ttl: number, condition: 'NX']
-  >;
-  let redisGet: jest.Mock<Promise<string | null>, [key: string]>;
-  let redisUnlink: jest.Mock<Promise<number>, [key: string]>;
-  let redisEval: jest.Mock<Promise<unknown>, []>;
+  let redisEval: jest.Mock<Promise<unknown>, [string, number, ...(string | number)[]]>;
 
   beforeEach(async () => {
-    redisSet = jest
-      .fn<Promise<string>, [string, string, 'EX', number, 'NX']>()
-      .mockResolvedValue('OK');
-    redisGet = jest.fn<Promise<string | null>, [string]>().mockResolvedValue(null);
-    redisUnlink = jest.fn<Promise<number>, [string]>().mockResolvedValue(1);
-    redisEval = jest.fn<Promise<unknown>, []>().mockResolvedValue([1, 1_000, 0, 0]);
+    redisEval = jest
+      .fn<Promise<unknown>, [string, number, ...(string | number)[]]>()
+      .mockResolvedValue([1, 1_000, 0, 0]);
     const redisClient = {
       status: 'ready',
       options: { keyPrefix: '' },
-      set: redisSet,
-      get: redisGet,
-      unlink: redisUnlink,
       eval: redisEval,
       quit: jest.fn(() => Promise.resolve('OK')),
       disconnect: jest.fn(),
@@ -190,6 +178,7 @@ describe('HTTP conventions (e2e)', () => {
   });
 
   it('stores a string OTP with a two-minute TTL and does not return it', async () => {
+    redisEval.mockResolvedValueOnce([1, 1_000, 0, 0]).mockResolvedValueOnce('created');
     const response = await request(app.getHttpServer())
       .post('/api/v1/enrollments/challenge')
       .send({ phoneNumber: '09123456789' })
@@ -197,12 +186,16 @@ describe('HTTP conventions (e2e)', () => {
 
     expect(response.body).toMatchObject({ success: true, data: null });
     expect(JSON.stringify(response.body)).not.toMatch(/\b\d{6}\b/);
-    expect(redisSet).toHaveBeenCalledWith(
+    expect(redisEval).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      2,
       'enrollments:challenge:09123456789',
+      'enrollments:challenge-quota:09123456789',
       expect.stringMatching(/^\d{6}$/),
-      'EX',
-      120,
-      'NX',
+      120_000,
+      3_600_000,
+      5,
     );
   });
 
@@ -240,11 +233,8 @@ describe('HTTP conventions (e2e)', () => {
     expect(JSON.stringify(response.body)).not.toContain('otp');
   });
 
-  it.each([
-    ['missing or expired', null],
-    ['incorrect', '654321'],
-  ])('returns the same generic error for a %s OTP', async (_state, storedOtp) => {
-    redisGet.mockResolvedValue(storedOtp);
+  it('returns a generic error when Redis rejects OTP verification', async () => {
+    redisEval.mockResolvedValueOnce([1, 1_000, 0, 0]).mockResolvedValueOnce(0);
 
     const response = await request(app.getHttpServer())
       .post('/api/v1/enrollments/verify')
@@ -259,12 +249,11 @@ describe('HTTP conventions (e2e)', () => {
       },
     });
     expect(JSON.stringify(response.body)).not.toContain('details');
-    expect(redisGet).toHaveBeenCalledWith('enrollments:challenge:09123456789');
-    expect(redisUnlink).not.toHaveBeenCalled();
+    expect(redisEval).toHaveBeenCalledTimes(2);
   });
 
   it('accepts and consumes a valid OTP', async () => {
-    redisGet.mockResolvedValue('123456');
+    redisEval.mockResolvedValueOnce([1, 1_000, 0, 0]).mockResolvedValueOnce(1);
 
     const response = await request(app.getHttpServer())
       .post('/api/v1/enrollments/verify')
@@ -272,7 +261,13 @@ describe('HTTP conventions (e2e)', () => {
       .expect(200);
 
     expect(response.body).toMatchObject({ success: true, data: null });
-    expect(redisUnlink).toHaveBeenCalledWith('enrollments:challenge:09123456789');
+    expect(redisEval).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      1,
+      'enrollments:challenge:09123456789',
+      '123456',
+    );
   });
 
   it('returns structured validation errors', async () => {

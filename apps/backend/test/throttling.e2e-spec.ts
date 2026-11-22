@@ -76,6 +76,21 @@ describe('Redis throttling (e2e)', () => {
     return app.inject({ url, remoteAddress: '127.0.0.1', headers: { 'x-forwarded-for': ip } });
   }
 
+  function enrollment(
+    app: NestFastifyApplication,
+    action: 'challenge' | 'verify',
+    ip: string,
+    payload: { phoneNumber: string; otp?: string },
+  ) {
+    return app.inject({
+      method: 'POST',
+      url: `/enrollments/${action}`,
+      remoteAddress: '127.0.0.1',
+      headers: { 'x-forwarded-for': ip },
+      payload,
+    });
+  }
+
   function bucket(ip: string, name: 'short' | 'long'): string {
     const key = createHash('sha256')
       .update(`ThrottleTestController-first-${name}-${ip}`)
@@ -197,5 +212,81 @@ describe('Redis throttling (e2e)', () => {
     expect(blocked.headers['x-ratelimit-remaining-short']).toBe('8');
     expect(blocked.headers['x-ratelimit-limit']).toBe('100');
     expect(blocked.headers['retry-after-long']).toBe('60');
+  });
+
+  it('issues only one concurrent challenge and preserves its cooldown after a single verification', async () => {
+    const phoneNumber = '09120000001';
+    const redis = appA.get<Redis>(REDIS_CLIENT);
+    const challengeKey = `enrollments:challenge:${phoneNumber}`;
+    const quotaKey = `enrollments:challenge-quota:${phoneNumber}`;
+    const requests = await Promise.all([
+      enrollment(appA, 'challenge', '198.51.100.31', { phoneNumber }),
+      enrollment(appB, 'challenge', '198.51.100.32', { phoneNumber }),
+    ]);
+    expect(requests.map((response) => response.statusCode).sort()).toEqual([200, 429]);
+    expect(await redis.zcard(quotaKey)).toBe(1);
+
+    const expiry = await redis.pexpiretime(challengeKey);
+    expect((await redis.pexpiretime(quotaKey)) - expiry).toBe(3_480_000);
+    const otp = await redis.get(challengeKey);
+    if (otp === null) {
+      throw new Error('Challenge was not stored in Redis');
+    }
+    const verifications = await Promise.all([
+      enrollment(appA, 'verify', '198.51.100.31', { phoneNumber, otp }),
+      enrollment(appB, 'verify', '198.51.100.32', { phoneNumber, otp }),
+    ]);
+    expect(verifications.map((response) => response.statusCode).sort()).toEqual([200, 400]);
+    expect(await redis.pexpiretime(challengeKey)).toBe(expiry);
+    expect(await redis.get(challengeKey)).not.toBe(otp);
+
+    const rejected = await enrollment(appB, 'challenge', '198.51.100.33', { phoneNumber });
+    expect(rejected.statusCode).toBe(429);
+    expect(await redis.pexpiretime(challengeKey)).toBe(expiry);
+    expect(await redis.zcard(quotaKey)).toBe(1);
+  });
+
+  it('blocks the sixth challenge across IPs until the oldest challenge leaves the rolling hour', async () => {
+    const phoneNumber = '09120000002';
+    const redis = appA.get<Redis>(REDIS_CLIENT);
+    const challengeKey = `enrollments:challenge:${phoneNumber}`;
+    const quotaKey = `enrollments:challenge-quota:${phoneNumber}`;
+    const [seconds, micros] = await redis.time();
+    const now = Number(seconds) * 1_000 + Math.floor(Number(micros) / 1_000);
+    await redis.zadd(
+      quotaKey,
+      now - 59 * 60_000,
+      'oldest',
+      now - 50 * 60_000,
+      'second',
+      now - 30 * 60_000,
+      'third',
+      now - 10 * 60_000,
+      'fourth',
+    );
+
+    const fifth = await enrollment(appA, 'challenge', '198.51.100.41', { phoneNumber });
+    expect(fifth.statusCode).toBe(200);
+    expect(await redis.zcard(quotaKey)).toBe(5);
+    const quotaExpiry = await redis.pexpiretime(quotaKey);
+
+    // Simulate expiry of the OTP without waiting two minutes or changing the hourly quota.
+    expect(await redis.pexpireat(challengeKey, 1)).toBe(1);
+    const sixth = await enrollment(appB, 'challenge', '198.51.100.42', { phoneNumber });
+    expect(sixth.statusCode).toBe(429);
+    expect(sixth.json<ApiErrorResponse>().error.message).toContain('سقف مجاز');
+    expect(await redis.exists(challengeKey)).toBe(0);
+    expect(await redis.pexpiretime(quotaKey)).toBe(quotaExpiry);
+
+    const otherPhone = await enrollment(appB, 'challenge', '198.51.100.42', {
+      phoneNumber: '09120000003',
+    });
+    expect(otherPhone.statusCode).toBe(200);
+
+    await redis.zadd(quotaKey, now - 3_601_000, 'oldest');
+    const recovered = await enrollment(appB, 'challenge', '198.51.100.43', { phoneNumber });
+    expect(recovered.statusCode).toBe(200);
+    expect(await redis.zscore(quotaKey, 'oldest')).toBeNull();
+    expect(await redis.zcard(quotaKey)).toBe(5);
   });
 });

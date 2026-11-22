@@ -5,6 +5,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { minutes, Throttle } from '@nestjs/throttler';
 import { z } from 'zod';
@@ -50,6 +51,9 @@ export class EnrollmentsController {
   @ApiOkResponse({ description: 'The OTP was saved and expires after two minutes.' })
   @ApiBadRequestResponse({
     description: 'The phone number is not a valid Iranian mobile number.',
+  })
+  @ApiTooManyRequestsResponse({
+    description: 'The IP limit, two-minute cooldown, or hourly phone limit was reached.',
   })
   createChallenge(
     @Body(new ZodValidationPipe(otpRequestSchema, INVALID_ENROLLMENT_INPUT_MESSAGE))

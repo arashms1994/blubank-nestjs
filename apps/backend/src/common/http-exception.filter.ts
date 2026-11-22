@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Injectable,
 } from '@nestjs/common';
+import { ThrottlerException } from '@nestjs/throttler';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { PinoLogger } from 'nestjs-pino';
 
@@ -24,7 +25,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const metadata = createResponseMetadata(request);
     let response: ApiErrorResponse;
     let statusCode: number;
-    if (exception instanceof AppException) {
+    if (exception instanceof ThrottlerException) {
+      statusCode = HttpStatus.TOO_MANY_REQUESTS;
+      response = createErrorResponse(
+        {
+          code: 'RATE_LIMITED',
+          message: 'تعداد درخواست‌ها بیش از حد مجاز است. کمی بعد دوباره تلاش کنید',
+        },
+        metadata,
+      );
+    } else if (exception instanceof AppException) {
       statusCode = exception.getStatus();
       response = createErrorResponse(
         {

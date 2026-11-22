@@ -33,16 +33,24 @@ describe('validateEnv', () => {
     expect(() => validateEnv({ BODY_LIMIT_BYTES: '1048577' })).toThrow(/BODY_LIMIT_BYTES/);
   });
 
-  it('parses comma-separated CORS origins and boolean proxy trust', () => {
+  it('parses comma-separated CORS origins and a trusted proxy CIDR', () => {
     expect(
       validateEnv({
         CORS_ORIGINS: 'https://app.example, https://admin.example',
-        TRUST_PROXY: 'true',
+        TRUST_PROXY: '10.0.0.0/24',
       }),
     ).toMatchObject({
       CORS_ORIGINS: ['https://app.example', 'https://admin.example'],
-      TRUST_PROXY: true,
+      TRUST_PROXY: '10.0.0.0/24',
     });
+  });
+
+  it.each(['loopback', '127.0.0.1', '2001:db8::/64'])('accepts %s for proxy trust', (proxy) => {
+    expect(validateEnv({ TRUST_PROXY: proxy }).TRUST_PROXY).toBe(proxy);
+  });
+
+  it.each(['true', '1', 'example.com', '10.0.0.0/33'])('rejects %s for proxy trust', (proxy) => {
+    expect(() => validateEnv({ TRUST_PROXY: proxy })).toThrow(/TRUST_PROXY/);
   });
 
   it('requires at least one CORS origin in production', () => {

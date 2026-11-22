@@ -23,7 +23,7 @@ async function bootstrap() {
   const configContext = await NestFactory.createApplicationContext(configModule, { logger: false });
   const initialConfig = configContext.get<ConfigService<Env, true>>(ConfigService);
   const adapter = new FastifyAdapter({
-    // trustProxy controls whether forwarded headers are trusted when Fastify determines request.ip.
+    // Only explicitly trusted proxies can supply the forwarded address used as request.ip.
     trustProxy: initialConfig.get('TRUST_PROXY'),
     bodyLimit: initialConfig.get('BODY_LIMIT_BYTES'),
     logger: getPinoOptions({

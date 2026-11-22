@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+const trustedProxy = z.union([
+  z.enum(['loopback', 'linklocal', 'uniquelocal']),
+  z.ipv4(),
+  z.ipv6(),
+  z.cidrv4(),
+  z.cidrv6(),
+]);
+
 export const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'production']).default('development'),
@@ -22,9 +30,8 @@ export const envSchema = z
           .filter(Boolean),
       ),
     TRUST_PROXY: z
-      .enum(['true', 'false'])
-      .default('false')
-      .transform((trustProxy) => trustProxy === 'true'),
+      .union([z.literal('false').transform(() => false as const), trustedProxy])
+      .default(false),
   })
   .superRefine((env, context) => {
     if (env.NODE_ENV === 'production' && env.CORS_ORIGINS.length === 0) {

@@ -13,6 +13,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test, TestingModule } from '@nestjs/testing';
+import { seconds, Throttle } from '@nestjs/throttler';
 import type Redis from 'ioredis';
 import { Logger } from 'nestjs-pino';
 import request from 'supertest';
@@ -29,6 +30,7 @@ import { getPinoOptions } from './../src/config/logging';
 @Controller({ path: 'test', version: '1' })
 class E2eController {
   @Post('body')
+  @Throttle({ default: { limit: 10, ttl: seconds(1) } })
   validateBody(
     @Body(new ZodValidationPipe(z.object({ count: z.coerce.number().int().positive() })))
     body: {
@@ -57,6 +59,7 @@ describe('HTTP conventions (e2e)', () => {
   >;
   let redisGet: jest.Mock<Promise<string | null>, [key: string]>;
   let redisUnlink: jest.Mock<Promise<number>, [key: string]>;
+  let redisEval: jest.Mock<Promise<unknown>, []>;
 
   beforeEach(async () => {
     redisSet = jest
@@ -64,12 +67,14 @@ describe('HTTP conventions (e2e)', () => {
       .mockResolvedValue('OK');
     redisGet = jest.fn<Promise<string | null>, [string]>().mockResolvedValue(null);
     redisUnlink = jest.fn<Promise<number>, [string]>().mockResolvedValue(1);
+    redisEval = jest.fn<Promise<unknown>, []>().mockResolvedValue([1, 1_000, 0, 0]);
     const redisClient = {
       status: 'ready',
       options: { keyPrefix: '' },
       set: redisSet,
       get: redisGet,
       unlink: redisUnlink,
+      eval: redisEval,
       quit: jest.fn(() => Promise.resolve('OK')),
       disconnect: jest.fn(),
     } as unknown as Redis;
@@ -166,6 +171,22 @@ describe('HTTP conventions (e2e)', () => {
           meta: { path: '/api/v1/test/body' },
         });
       });
+  });
+
+  it('fails a throttled request when Redis is unavailable and still serves health', async () => {
+    redisEval.mockRejectedValue(new Error('private Redis connection detail'));
+
+    const failed = await request(app.getHttpServer())
+      .post('/api/v1/test/body')
+      .send({ count: 3 })
+      .expect(500);
+    expect(failed.body).toMatchObject({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'خطای داخلی رخ داد' },
+    });
+    expect(JSON.stringify(failed.body)).not.toContain('Redis');
+    await request(app.getHttpServer()).get('/health').expect(200);
+    expect(redisEval).toHaveBeenCalledTimes(1);
   });
 
   it('stores a string OTP with a two-minute TTL and does not return it', async () => {
